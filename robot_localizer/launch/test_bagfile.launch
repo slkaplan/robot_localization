@@ -4,11 +4,16 @@
   <arg name="use_builtin" default="false"/>
   <arg name="scan_topic" default="stable_scan"/>
   <arg name="map_name"/>
+  <arg name="load_camera" default="false"/>
+  <arg name="use_gpu_laser" default="true"/>
 
   <node name="map_server" pkg="map_server" type="map_server" args="$(find robot_localizer)/maps/$(arg map_name).yaml"/>
   <node name="bag_player" pkg="rosbag" type="play" args="$(find robot_localizer)/bags/$(arg map_name).bag --clock --pause" output="screen"/>
 
-  <include file="$(find neato_node)/launch/set_urdf.launch"/>
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find robot_localizer)/rviz/pf.rviz"/>
+
+  <param name="robot_description"
+        command="$(find xacro)/xacro '$(find neato_description)/urdf/neato_standalone.urdf.xacro' load_camera:=$(arg load_camera) use_gpu_laser:=$(arg use_gpu_laser)"/>
 
  <group if="$(arg use_builtin)">
   <include file="$(find neato_2dnav)/launch/includes/amcl.launch.xml">

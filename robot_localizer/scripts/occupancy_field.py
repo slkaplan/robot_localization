@@ -1,8 +1,6 @@
 """ An implementation of an occupancy field that you can use to implement
     your particle filter """
 
-from __future__ import print_function, division
-
 import rospy
 
 from nav_msgs.srv import GetMap

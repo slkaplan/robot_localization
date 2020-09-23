@@ -1,8 +1,6 @@
 """ Some convenience functions for translating between various representations
     of a robot pose. """
 
-from __future__ import print_function, division
-
 import rospy
 
 from std_msgs.msg import Header

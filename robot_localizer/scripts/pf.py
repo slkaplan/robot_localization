@@ -1,8 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ This is the starter code for the robot localization project """
 
-from __future__ import print_function, division
 import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose
 
@@ -39,10 +38,9 @@ class ParticleFilter(object):
         xy_theta = \
             self.transform_helper.convert_pose_to_xy_and_theta(msg.pose.pose)
 
-        # TODO this should be deleted before posting
-        self.transform_helper.fix_map_to_odom_transform(msg.pose.pose,
-                                                        msg.header.stamp)
         # initialize your particle filter based on the xy_theta tuple
+
+        # Use the helper functions to fix the transform
 
     def run(self):
         r = rospy.Rate(5)
