@@ -2,6 +2,7 @@
   <arg name="scan_topic" default="stable_scan"/>
   <arg name="use_builtin" default="false"/>
   <arg name="map_file"/>
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find neato_2dnav)/rviz/pf_live.rviz"/>
  
   <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)"/> 
  
