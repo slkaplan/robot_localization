@@ -83,7 +83,12 @@ class TFHelper(object):
     def fix_map_to_odom_transform(self, robot_pose, timestamp):
         """ This method constantly updates the offset of the map and
             odometry coordinate systems based on the latest results from
-            the localizer """
+            the localizer.
+
+            robot_pose should be of type geometry_msgs/Pose and timestamp is of
+            type rospy.Time and represents the time at which the robot's pose
+            corresponds.
+            """
         (translation, rotation) = \
             self.convert_pose_inverse_transform(robot_pose)
         p = PoseStamped(
