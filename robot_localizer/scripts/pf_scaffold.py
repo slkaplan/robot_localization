@@ -209,7 +209,7 @@ class ParticleFilter:
             Arguments
             xy_theta: a triple consisting of the mean x, y, and theta (yaw) to initialize the
                       particle cloud around.  If this input is omitted, the odometry will be used """
-        if xy_theta is not None:
+        if xy_theta is None:
             xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose.pose)
         self.particle_cloud = []
         # TODO create particles
@@ -261,11 +261,13 @@ class ParticleFilter:
         self.odom_pose = self.tf_listener.transformPose(self.odom_frame, p)
         # store the the odometry pose in a more convenient format (x,y,theta)
         new_odom_xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose.pose)
+        if not self.current_odom_xy_theta:
+            self.current_odom_xy_theta = new_odom_xy_theta
+            return
+
         if not(self.particle_cloud):
             # now that we have all of the necessary transforms we can update the particle cloud
             self.initialize_particle_cloud(msg.header.stamp)
-            # cache the last odometric pose so we can only update our particle filter if we move more than self.d_thresh or self.a_thresh
-            self.current_odom_xy_theta = new_odom_xy_theta
         elif (math.fabs(new_odom_xy_theta[0] - self.current_odom_xy_theta[0]) > self.d_thresh or
               math.fabs(new_odom_xy_theta[1] - self.current_odom_xy_theta[1]) > self.d_thresh or
               math.fabs(new_odom_xy_theta[2] - self.current_odom_xy_theta[2]) > self.a_thresh):
