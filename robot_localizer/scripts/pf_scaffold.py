@@ -239,6 +239,10 @@ class ParticleFilter:
             # wait for initialization to complete
             return
 
+        # wait a little while to see if the transform becomes available.  This fixes a race
+        # condition where the scan would arrive a little bit before the odom to base_link transform
+        # was updated.
+        self.tf_listener.waitForTransform(self.base_frame, msg.header.frame_id, msg.header.stamp, rospy.Duration(0.5))
         if not(self.tf_listener.canTransform(self.base_frame, msg.header.frame_id, msg.header.stamp)):
             # need to know how to transform the laser to the base frame
             # this will be given by either Gazebo or neato_node
