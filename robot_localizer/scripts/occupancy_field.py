@@ -64,6 +64,21 @@ class OccupancyField(object):
                 self.closest_occ[ind] = \
                     distances[curr][0]*self.map.info.resolution
                 curr += 1
+        self.occupied = occupied
+
+    def get_obstacle_bounding_box(self):
+        """
+        Returns: the upper and lower bounds of x and y such that the resultant
+        bounding box contains all of the obstacles in the map.  The format of
+        the return value is ((x_lower, x_upper), (y_lower, y_upper))
+        """
+        lower_bounds = self.occupied.min(axis=0)
+        upper_bounds = self.occupied.max(axis=0)
+        r = self.map.info.resolution
+        return ((lower_bounds[0]*r + self.map.info.origin.position.x,
+                 upper_bounds[0]*r + self.map.info.origin.position.x),
+                (lower_bounds[1]*r + self.map.info.origin.position.y,
+                 upper_bounds[1]*r + self.map.info.origin.position.y))
 
     def get_closest_obstacle_distance(self, x, y):
         """ Compute the closest obstacle to the specified (x,y) coordinate in
