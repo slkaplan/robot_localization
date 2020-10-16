@@ -55,6 +55,11 @@ class TFHelper(object):
                              pose.orientation.w)
         angles = t.euler_from_quaternion(orientation_tuple)
         return (pose.position.x, pose.position.y, angles[2])
+    
+    def covert_xy_and_theta_to_pose(self, x, y, theta):
+        """ A helper function to convert a x, y, and theta values to a pose """
+        orientation_tuple = t.quaternion_from_euler(0,0,theta)
+        return Pose(position=Point(x=x,y=y,z=0), orientation=Quaternion(x=orientation_tuple[0], y=orientation_tuple[1], z=orientation_tuple[2], w=orientation_tuple[3]))
 
     def angle_normalize(self, z):
         """ convenience function to map an angle to the range [-pi,pi] """
