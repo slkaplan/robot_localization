@@ -197,6 +197,14 @@ Visualization Manager:
       Topic: /map_pose
       Unreliable: false
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /particle_marker
+      Name: MarkerArray
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -225,7 +233,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 11.637584686279297
+      Distance: 13.700891494750977
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -233,17 +241,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.5743227601051331
-        Y: -1.0982974767684937
-        Z: 0.36095988750457764
+        X: 2.3807857036590576
+        Y: 0.6010971665382385
+        Z: -0.4089154601097107
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5397963523864746
+      Pitch: 1.124796748161316
       Target Frame: <Fixed Frame>
-      Yaw: 0.14039674401283264
+      Yaw: 6.128581523895264
     Saved: ~
 Window Geometry:
   Displays:
@@ -262,4 +270,4 @@ Window Geometry:
     collapsed: false
   Width: 1294
   X: 72
-  Y: 29
+  Y: 0

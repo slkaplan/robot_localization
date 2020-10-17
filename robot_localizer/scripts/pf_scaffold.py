@@ -6,6 +6,8 @@ import rospy
 from std_msgs.msg import Header, String
 from sensor_msgs.msg import LaserScan, PointCloud
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
 from nav_msgs.srv import GetMap
 from copy import deepcopy
 
@@ -19,6 +21,7 @@ import math
 import time
 
 import numpy as np
+from numpy.random import choice
 from numpy.random import random_sample
 from sklearn.neighbors import NearestNeighbors
 from occupancy_field import OccupancyField
@@ -44,12 +47,13 @@ class Particle(object):
         self.x = x
         self.y = y
 
+
+
     def as_pose(self):
         """ A helper function to convert a particle to a geometry_msgs/Pose message """
         orientation_tuple = tf.transformations.quaternion_from_euler(0,0,self.theta)
         return Pose(position=Point(x=self.x,y=self.y,z=0), orientation=Quaternion(x=orientation_tuple[0], y=orientation_tuple[1], z=orientation_tuple[2], w=orientation_tuple[3]))
 
-    # TODO: define additional helper functions if needed
 
 class ParticleFilter:
     """ The class that represents a Particle Filter ROS Node
@@ -84,7 +88,7 @@ class ParticleFilter:
         self.odom_frame = "odom"        # the name of the odometry coordinate frame
         self.scan_topic = "scan"        # the topic where we will get laser scans from 
 
-        self.n_particles = 300          # the number of particles to use
+        self.n_particles = 2000      # the number of particles to use
 
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
@@ -121,21 +125,29 @@ class ParticleFilter:
         self.occupancy_field = OccupancyField()
         self.transform_helper = TFHelper()
 
+        # publish the marker array
+        #self.viz = rospy.Publisher('/particle_marker', Marker, queue_size=10)
+        #self.marker = Marker()
+        self.viz = rospy.Publisher('/particle_marker', MarkerArray, queue_size = 10)
+        self.markerArray = MarkerArray()
+
         self.initialized = True
-        ##########################################################################
 
     def update_robot_pose(self, timestamp):
-        """ Update the estimate of the robot's pose given the updated particles.
-            There are two logical methods for this:
-                (1): compute the mean pose
-                (2): compute the most likely pose (i.e. the mode of the distribution)
-        """
-        # first make sure that the particle weights are normalized
         self.normalize_particles()
+        self.particle_cloud.sort(key=lambda particle: particle.w)
+        length = len(self.particle_cloud)
+        top_ten = self.particle_cloud[length-10:]
+        x = [p.x for p in top_ten]
+        y = [p.y for p in top_ten]
+        theta = [p.theta for p in top_ten]
+        avg_x = sum(x)/len(x)
+        avg_y = sum(y)/len(y)
+        avg_theta = sum(theta)/len(theta)
 
         # TODO: assign the latest pose into self.robot_pose as a geometry_msgs.Pose object
         # just to get started we will fix the robot's pose to always be at the origin
-        self.robot_pose = Pose()
+        self.robot_pose = self.transform_helper.covert_xy_and_theta_to_pose(avg_x,avg_y,avg_theta)
 
         self.transform_helper.fix_map_to_odom_transform(self.robot_pose, timestamp)
 
@@ -158,12 +170,15 @@ class ParticleFilter:
                      new_odom_xy_theta[1] - self.current_odom_xy_theta[1],
                      new_odom_xy_theta[2] - self.current_odom_xy_theta[2])
 
+            for p in self.particle_cloud:
+                p.x += delta[0]
+                p.y += delta[1]
+                p.theta += delta[2]
+
             self.current_odom_xy_theta = new_odom_xy_theta
         else:
             self.current_odom_xy_theta = new_odom_xy_theta
             return
-
-        # TODO: modify particles using delta
 
     def map_calc_range(self,x,y,theta):
         """ Difficulty Level 3: implement a ray tracing likelihood model... Let me know if you are interested """
@@ -178,22 +193,51 @@ class ParticleFilter:
         """
         # make sure the distribution is normalized
         self.normalize_particles()
-        # TODO: fill out the rest of the implementation
+
+        norm_weights= [p.w for p in self.particle_cloud]
+
+        ideal_particles = choice(self.particle_cloud, 10, norm_weights)
+        self.particle_cloud.clear()
+        
+        for p in ideal_particles:
+            x_pos, y_pos, angle = p.x, p.y, p.theta
+            x_particle = np.random.normal(x_pos,0.15,size=1)
+            y_particle = np.random.normal(y_pos,0.15,size=1)
+            theta_particle = self.transform_helper.loop_around(np.random.normal(angle,10,size=1))
+            self.particle_cloud.append(Particle(x_particle, y_particle, theta_particle))
+
+
+
+
+
+        
+        
 
     def update_particles_with_laser(self, msg):
         """ Updates the particle weights in response to the scan contained in the msg """
         #transform laser data from particle's perspective to map coords
         scan = msg.ranges
-        for p in self.particle_cloud:
-            p.w = 0
-            
+        
+        for index, p in enumerate(self.particle_cloud):
+            total_beam_x = np.ndarray((361,))
+            total_beam_y = np.ndarray((361,))
             for theta, dist in enumerate(scan):
                 theta_rad = math.radians(theta + p.theta)
-                beam_x = p.x + dist * math.cos(theta_rad)
-                beam_y = p.y + dist * math.sin(theta_rad)
-                closest_dist = self.occupancy_field.get_closest_obstacle_distance(beam_x, beam_y)
+                total_beam_x[theta] = p.x + dist * math.cos(theta_rad)
+                total_beam_y[theta] = p.y + dist * math.sin(theta_rad)
+            
+            
+            particle_distances = self.occupancy_field.get_closest_obstacle_distance(total_beam_x, total_beam_y)
+            cleaned_particle_distances = [dist for dist in particle_distances if(math.isnan(dist)!= True)]
+            
+            p_d_cubed = np.power(cleaned_particle_distances,3)
+            p_d_sum_cubed = np.sum(p_d_cubed)
+            p.w = p_d_sum_cubed/360
+            #print("Weight Particle #" + str(index) + ": " + str(p.w))
 
-        
+
+
+
 
     @staticmethod
     def draw_random_sample(choices, probabilities, n):
@@ -229,9 +273,8 @@ class ParticleFilter:
             print("Kidnap Problem")
             x_bound, y_bound = self.occupancy_field.get_obstacle_bounding_box()
 
-
-            x_particle = np.random.normal(x_bound[0],x_bound[1],size=self.n_particles)
-            y_particle = np.random.normal(y_bound[0], y_bound[1],size=self.n_particles)
+            x_particle = np.random.uniform(x_bound[0],x_bound[1],size=self.n_particles)
+            y_particle = np.random.uniform(y_bound[0], y_bound[1],size=self.n_particles)
             theta_particle = np.random.randint(0,360,size=self.n_particles)
             
         else:
@@ -250,28 +293,35 @@ class ParticleFilter:
                                         theta_particle[i]) \
                                 for i in range(self.n_particles)]
         
-        self.normalize_particles()
-
-        self.update_robot_pose(timestamp)
+        
 
     def normalize_particles(self):
         """ Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
-        # TODO: implement this
-        pass
+        raw = [p.w for p in self.particle_cloud]
+        for p in self.particle_cloud:
+            p.w = float(p.w)/sum(raw)
+        #print("Printing normalize: " + str(sum([p.w for p in self.particle_cloud])))
+
 
     def publish_particles(self, msg):
         particles_conv = []
-        for p in self.particle_cloud:
+        
+        for num, p in enumerate(self.particle_cloud):
             particles_conv.append(p.as_pose())
-        # actually send the message so that we can view it in rviz
+        
         self.particle_pub.publish(PoseArray(header=Header(stamp=rospy.Time.now(),
                                             frame_id=self.map_frame),
                                   poses=particles_conv))
 
+
+            # self.marker_update("map", self.particle_cloud, False)
+            # self.viz.publish()
+            
     def scan_received(self, msg):
         """ This is the default logic for what to do when processing scan data.
             Feel free to modify this, however, we hope it will provide a good
             guide.  The input msg is an object of type sensor_msgs/LaserScan """
+        
         if not(self.initialized):
             # wait for initialization to complete
             return
@@ -310,10 +360,15 @@ class ParticleFilter:
             print("Particle Cloud Empty")
             # now that we have all of the necessary transforms we can update the particle cloud
             self.initialize_particle_cloud(msg.header.stamp)
+            self.update_particles_with_laser(msg)
+            self.normalize_particles()
+            self.update_robot_pose(msg.header.stamp)
+            self.resample_particles() 
         elif (math.fabs(new_odom_xy_theta[0] - self.current_odom_xy_theta[0]) > self.d_thresh or
               math.fabs(new_odom_xy_theta[1] - self.current_odom_xy_theta[1]) > self.d_thresh or
               math.fabs(new_odom_xy_theta[2] - self.current_odom_xy_theta[2]) > self.a_thresh):
             # we have moved far enough to do an update!
+            print("UPDATING PARTICLES")
             self.update_particles_with_odom(msg)    # update based on odometry
             if self.last_projected_stable_scan:
                 last_projected_scan_timeshift = deepcopy(self.last_projected_stable_scan)
@@ -325,7 +380,33 @@ class ParticleFilter:
             self.resample_particles()               # resample particles to focus on areas of high density
         # publish particles (so things like rviz can see them)
         self.publish_particles(msg)
+        
+    def marker_update(self, frame_id, p_cloud, delete):
+        num = 0
+        if(delete):
+            self.markerArray.markers = []
+        else:
+            for p in p_cloud:
+                marker = Marker()
+                marker.header.frame_id = frame_id
+                marker.header.stamp = rospy.Time.now()
+                marker.ns = "my_namespace"
+                marker.id = num
+                marker.type = Marker.ARROW
+                marker.action = Marker.ADD
+                marker.pose = p.as_pose()
+                marker.pose.position.z = 0.5
+                marker.scale.x = 1.0
+                marker.scale.y = 0.1
+                marker.scale.z = 0.1
+                marker.color.a = 1.0 # Don't forget to set the alpha!
+                marker.color.r = 1.0
+                marker.color.g = 0.0
+                marker.color.b = 0.0
 
+                num+=1
+
+                self.markerArray.markers.append(marker)
 
 if __name__ == '__main__':
     n = ParticleFilter()
