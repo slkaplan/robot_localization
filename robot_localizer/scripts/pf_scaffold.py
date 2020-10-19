@@ -10,6 +10,7 @@ from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 from nav_msgs.srv import GetMap
 from copy import deepcopy
+from std_msgs.msg import Float64MultiArray
 
 import tf
 from tf import TransformListener
@@ -26,6 +27,9 @@ from numpy.random import random_sample
 from sklearn.neighbors import NearestNeighbors
 from occupancy_field import OccupancyField
 from helper_functions import TFHelper
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 
 class Particle(object):
     """ Represents a hypothesis (particle) of the robot's pose consisting of x,y and theta (yaw)
@@ -88,14 +92,16 @@ class ParticleFilter:
         self.odom_frame = "odom"        # the name of the odometry coordinate frame
         self.scan_topic = "scan"        # the topic where we will get laser scans from 
 
-        self.n_particles = 4000      # the number of particles to use
+        self.n_particles = 1000      # the number of particles to use
 
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
 
         self.laser_max_distance = 2.0   # maximum penalty to assess in the likelihood field model
 
-        # TODO: define additional constants if needed
+    
+
+        
 
         # Setup pubs and subs
 
@@ -104,6 +110,9 @@ class ParticleFilter:
 
         # publish the current particle cloud.  This enables viewing particles in rviz.
         self.particle_pub = rospy.Publisher("particlecloud", PoseArray, queue_size=10)
+
+        # publish weights for live graph node
+        self.weight_pub = rospy.Publisher("/graph_data", Float64MultiArray, queue_size=10)
 
         # laser_subscriber listens for data from the lidar
         rospy.Subscriber(self.scan_topic, LaserScan, self.scan_received)
@@ -170,10 +179,17 @@ class ParticleFilter:
                      new_odom_xy_theta[1] - self.current_odom_xy_theta[1],
                      new_odom_xy_theta[2] - self.current_odom_xy_theta[2])
 
+            delta_x = delta[0]
+            delta_y = delta[1]
+            delta_theta = delta[2]
+            theta_1 = math.atan2(delta_y, delta_x)
+            dist = math.sqrt(delta_x**2 + delta_y**2)
+            theta_2 = delta_theta - theta_1
             for p in self.particle_cloud:
-                p.x += delta[0]
-                p.y += delta[1]
-                p.theta += delta[2]
+                p.theta+= theta_1
+                p.x += math.cos(math.radians(p.theta)) * dist
+                p.y += math.sin(math.radians(p.theta)) * dist
+                p.theta += theta_2
 
             self.current_odom_xy_theta = new_odom_xy_theta
         else:
@@ -199,7 +215,7 @@ class ParticleFilter:
 
         self.particle_cloud.sort(key=lambda particle: particle.w, reverse=True)
 
-        num_best = int(p_cloud_length*0.5)
+        num_best = int(p_cloud_length*0.2)
         best_particles = self.particle_cloud[0:num_best]
 
         norm_weights= [p.w for p in best_particles]
@@ -221,8 +237,15 @@ class ParticleFilter:
             # y_particle = rand_y + y_pos
             # theta_particle = np.random.randint(0,360)
             
-
-
+        # self.normalize_particles()
+        # norm_weights= [p.w for p in best_particles]
+        # self.write_to_txt(norm_weights)
+        # rospy.sleep(.1)
+        self.normalize_particles()
+        norm_weights= [p.w for p in best_particles]
+        float_array = Float64MultiArray()
+        float_array.data = norm_weights
+        self.weight_pub.publish(float_array)
 
         
         
@@ -242,11 +265,11 @@ class ParticleFilter:
             
             
             particle_distances = self.occupancy_field.get_closest_obstacle_distance(total_beam_x, total_beam_y)
-            cleaned_particle_distances = [dist for dist in particle_distances if(math.isnan(dist)!= True)]
+            cleaned_particle_distances = [np.exp(-dist**2) for dist in particle_distances if(math.isnan(dist)!= True)]
             
             p_d_cubed = np.power(cleaned_particle_distances,3)
-            p_d_sum_cubed = np.sum(p_d_cubed)
-            p.w = (p_d_sum_cubed/360)**-1
+            p.w = np.sum(p_d_cubed)
+           
             #print("Weight Particle #" + str(index) + ": " + str(p.w))
 
 
@@ -423,6 +446,18 @@ class ParticleFilter:
 
                 self.markerArray.markers.append(marker)
 
+    
+    def write_to_txt(self, prob_dist):
+        
+        file_object = open(r"resample_prob.txt","r+")
+        file_object.truncate(0)
+        for i in range(len(prob_dist)):
+            file_object.write(str(prob_dist[i])+"\n")
+
+        
+        file_object.close() 
+
+
 if __name__ == '__main__':
     n = ParticleFilter()
     r = rospy.Rate(5)
@@ -430,4 +465,5 @@ if __name__ == '__main__':
     while not(rospy.is_shutdown()):
         # in the main loop all we do is continuously broadcast the latest map to odom transform
         n.transform_helper.send_last_map_to_odom_transform()
+
         r.sleep()
