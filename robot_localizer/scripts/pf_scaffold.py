@@ -88,7 +88,7 @@ class ParticleFilter:
         self.odom_frame = "odom"        # the name of the odometry coordinate frame
         self.scan_topic = "scan"        # the topic where we will get laser scans from 
 
-        self.n_particles = 2000      # the number of particles to use
+        self.n_particles = 4000      # the number of particles to use
 
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
@@ -194,19 +194,33 @@ class ParticleFilter:
         # make sure the distribution is normalized
         self.normalize_particles()
 
-        norm_weights= [p.w for p in self.particle_cloud]
-
-        ideal_particles = choice(self.particle_cloud, 10, norm_weights)
-        self.particle_cloud.clear()
         
+        p_cloud_length = len(self.particle_cloud)
+
+        self.particle_cloud.sort(key=lambda particle: particle.w, reverse=True)
+
+        num_best = int(p_cloud_length*0.5)
+        best_particles = self.particle_cloud[0:num_best]
+
+        norm_weights= [p.w for p in best_particles]
+        ideal_particles = choice(best_particles, p_cloud_length-len(best_particles), norm_weights)
+        self.particle_cloud = []
+        self.particle_cloud = best_particles
+        dist = 0.5
         for p in ideal_particles:
             x_pos, y_pos, angle = p.x, p.y, p.theta
-            x_particle = np.random.normal(x_pos,0.15,size=1)
-            y_particle = np.random.normal(y_pos,0.15,size=1)
-            theta_particle = self.transform_helper.loop_around(np.random.normal(angle,10,size=1))
+            x_particle = np.random.normal(x_pos,0.05)
+            y_particle = np.random.normal(y_pos,0.05)
+            theta_particle = self.transform_helper.loop_around(np.random.normal(angle,1))
             self.particle_cloud.append(Particle(x_particle, y_particle, theta_particle))
-
-
+            
+            # bound = 0.5
+            # rand_x = np.random.uniform(-bound, bound)
+            # rand_y = np.random.uniform(-bound, bound)
+            # x_particle = rand_x + x_pos
+            # y_particle = rand_y + y_pos
+            # theta_particle = np.random.randint(0,360)
+            
 
 
 
@@ -232,7 +246,7 @@ class ParticleFilter:
             
             p_d_cubed = np.power(cleaned_particle_distances,3)
             p_d_sum_cubed = np.sum(p_d_cubed)
-            p.w = p_d_sum_cubed/360
+            p.w = (p_d_sum_cubed/360)**-1
             #print("Weight Particle #" + str(index) + ": " + str(p.w))
 
 
@@ -378,6 +392,7 @@ class ParticleFilter:
             self.update_particles_with_laser(msg)   # update based on laser scan
             self.update_robot_pose(msg.header.stamp)                # update robot's pose
             self.resample_particles()               # resample particles to focus on areas of high density
+            
         # publish particles (so things like rviz can see them)
         self.publish_particles(msg)
         
