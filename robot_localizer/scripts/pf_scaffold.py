@@ -262,15 +262,15 @@ class ParticleFilter:
         distances = np.array(scan) # will be scan values (scan)
         angles_rad = np.deg2rad(angles)
 
-        sin_values = np.sin(angles)
-        cos_values = np.cos(angles)
-        d_angles = np.multiply(distances, sin_values)
-        
+        sin_values = np.sin(angles_rad)
+        cos_values = np.cos(angles_rad)
+        d_angles_sin = np.multiply(distances, sin_values)
+        d_angles_cos = np.multiply(distances, cos_values)
 
 
         for p in self.particle_cloud:
-            total_beam_x = np.add(p.x, d_angles)
-            total_beam_y = np.add(p.y, d_angles)
+            total_beam_x = np.add(p.x, d_angles_cos)
+            total_beam_y = np.add(p.y, d_angles_sin)
 
             particle_distances = self.occupancy_field.get_closest_obstacle_distance(total_beam_x, total_beam_y)
             cleaned_particle_distances = [np.exp(-dist**2) for dist in particle_distances if(math.isnan(dist)!= True)]
