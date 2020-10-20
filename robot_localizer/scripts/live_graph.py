@@ -38,7 +38,7 @@ class LiveGraph:
         data = graph.get_data()
         print(data)
         plt.clf()
-        plt.hist(data, density=True, bins=30)
+        plt.hist(data, density=True, bins=50)
 
 
 if __name__ == '__main__':
