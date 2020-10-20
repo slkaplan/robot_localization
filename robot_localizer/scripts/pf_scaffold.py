@@ -92,10 +92,10 @@ class ParticleFilter:
         self.odom_frame = "odom"        # the name of the odometry coordinate frame
         self.scan_topic = "scan"        # the topic where we will get laser scans from 
 
-        self.start_particles = 100      # the number of particles to use
-        self.end_particles = 10
+        self.start_particles = 2000      # the number of particles to use
+        self.end_particles = 100
         self.resample_count = 0
-        self.middle_step = 4
+        self.middle_step = 6
 
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
@@ -256,21 +256,42 @@ class ParticleFilter:
         """ Updates the particle weights in response to the scan contained in the msg """
         #transform laser data from particle's perspective to map coords
         scan = msg.ranges
+        num_particles = len(self.particle_cloud)
         
-        for index, p in enumerate(self.particle_cloud):
-            total_beam_x = np.ndarray((361,))
-            total_beam_y = np.ndarray((361,))
-            for theta, dist in enumerate(scan):
-                theta_rad = math.radians(theta + p.theta)
-                total_beam_x[theta] = p.x + dist * math.cos(theta_rad)
-                total_beam_y[theta] = p.y + dist * math.sin(theta_rad)
-            
-            
+        angles = np.arange(361) # will be scan indices (0-361)
+        distances = np.array(scan) # will be scan values (scan)
+        angles_rad = np.deg2rad(angles)
+
+        sin_values = np.sin(angles)
+        cos_values = np.cos(angles)
+        d_angles = np.multiply(distances, sin_values)
+        
+
+
+        for p in self.particle_cloud:
+            total_beam_x = np.add(p.x, d_angles)
+            total_beam_y = np.add(p.y, d_angles)
+
             particle_distances = self.occupancy_field.get_closest_obstacle_distance(total_beam_x, total_beam_y)
             cleaned_particle_distances = [np.exp(-dist**2) for dist in particle_distances if(math.isnan(dist)!= True)]
             
             p_d_cubed = np.power(cleaned_particle_distances,3)
             p.w = np.sum(p_d_cubed)
+
+        # for index, p in enumerate(self.particle_cloud):
+        #     total_beam_x = np.ndarray((361,))
+        #     total_beam_y = np.ndarray((361,))
+        #     for theta, dist in enumerate(scan):
+        #         theta_rad = math.radians(theta + p.theta)
+        #         total_beam_x[theta] = p.x + dist * math.cos(theta_rad)
+        #         total_beam_y[theta] = p.y + dist * math.sin(theta_rad)
+            
+            
+        #     particle_distances = self.occupancy_field.get_closest_obstacle_distance(total_beam_x, total_beam_y)
+        #     cleaned_particle_distances = [np.exp(-dist**2) for dist in particle_distances if(math.isnan(dist)!= True)]
+            
+        #     p_d_cubed = np.power(cleaned_particle_distances,3)
+        #     p.w = np.sum(p_d_cubed)
            
             #print("Weight Particle #" + str(index) + ": " + str(p.w))
 
