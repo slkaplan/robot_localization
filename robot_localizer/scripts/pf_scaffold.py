@@ -142,10 +142,13 @@ class ParticleFilter:
 
         self.initialized = True
 
+    # assigns robot pose. used only a visual debugger, the real data comes from the bag file. 
     def update_robot_pose(self, timestamp):
         self.normalize_particles()
         self.particle_cloud.sort(key=lambda particle: particle.w)
         length = len(self.particle_cloud)
+
+        # assigns the robot pose as the average of the top ten particle positions. Seems a little jumpy so subject to change. 
         top_ten = self.particle_cloud[length-10:]
         x = [p.x for p in top_ten]
         y = [p.y for p in top_ten]
@@ -154,22 +157,15 @@ class ParticleFilter:
         avg_y = sum(y)/len(y)
         avg_theta = sum(theta)/len(theta)
 
-        # TODO: assign the latest pose into self.robot_pose as a geometry_msgs.Pose object
-        # just to get started we will fix the robot's pose to always be at the origin
         self.robot_pose = self.transform_helper.covert_xy_and_theta_to_pose(avg_x,avg_y,avg_theta)
-
         self.transform_helper.fix_map_to_odom_transform(self.robot_pose, timestamp)
 
     def projected_scan_received(self, msg):
         self.last_projected_stable_scan = msg
 
+    # deadreckons particles with respect to robot motion. 
     def update_particles_with_odom(self, msg):
-        """ Update the particles using the newly given odometry pose.
-            The function computes the value delta which is a tuple (x,y,theta)
-            that indicates the change in position and angle between the odometry
-            when the particles were last updated and the current odometry.
-
-            msg: this is not really needed to implement this, but is here just in case.
+        """ To apply the robot transformations to a particle, it can be broken down into a rotations, a linear movement, and another rotation (which could equal 0)
         """
         new_odom_xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose.pose)
         # compute the change in x,y,theta since our last update
@@ -215,14 +211,14 @@ class ParticleFilter:
 
         self.particle_cloud.sort(key=lambda particle: particle.w, reverse=True)
 
-        num_best = int(p_cloud_length*0.2)
+        num_best = int(p_cloud_length*0.5)
         best_particles = self.particle_cloud[0:num_best]
 
         norm_weights= [p.w for p in best_particles]
         ideal_particles = choice(best_particles, p_cloud_length-len(best_particles), norm_weights)
         self.particle_cloud = []
         self.particle_cloud = best_particles
-        dist = 0.5
+        dist = 0.5 # adding a square meter of noise around each ideal particle
         for p in ideal_particles:
             x_pos, y_pos, angle = p.x, p.y, p.theta
             x_particle = np.random.normal(x_pos,0.05)
@@ -300,10 +296,13 @@ class ParticleFilter:
         self.initialize_particle_cloud(msg.header.stamp, xy_theta)
 
     def initialize_particle_cloud(self, timestamp, xy_theta=None):
-        """ Initialize the particle cloud.
-            Arguments
-            xy_theta: a triple consisting of the mean x, y, and theta (yaw) to initialize the
-                      particle cloud around.  If this input is omitted, the odometry will be used """
+        """ 
+        Initialize the particle cloud.
+        Arguments
+        xy_theta: a triple consisting of the mean x, y, and theta (yaw) to initialize the
+                    particle cloud around.  If this input is omitted, the odometry will be used 
+        Also check to see if we are attempting the robot kidnapping problem or are given an initial 2D pose
+        """
 
         
         if self.kidnap:
@@ -337,10 +336,15 @@ class ParticleFilter:
         raw = [p.w for p in self.particle_cloud]
         for p in self.particle_cloud:
             p.w = float(p.w)/sum(raw)
-        #print("Printing normalize: " + str(sum([p.w for p in self.particle_cloud])))
+        
 
 
     def publish_particles(self, msg):
+        """
+        Publishes particle poses on the map.
+        Uses Paul's default code at the moment, maybe later attempt to publish a visualization/MarkerArray
+        """
+
         particles_conv = []
         
         for num, p in enumerate(self.particle_cloud):
@@ -355,9 +359,10 @@ class ParticleFilter:
             # self.viz.publish()
             
     def scan_received(self, msg):
-        """ This is the default logic for what to do when processing scan data.
-            Feel free to modify this, however, we hope it will provide a good
-            guide.  The input msg is an object of type sensor_msgs/LaserScan """
+        """ 
+        All control flow happens here!
+        Special init case then goes into loop
+        """
         
         if not(self.initialized):
             # wait for initialization to complete

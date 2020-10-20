@@ -19,37 +19,31 @@ class LiveGraph:
     def __init__(self):
         rospy.init_node('live_graph') 
         self.data = []
-        
-
         rospy.Subscriber("/graph_data", Float64MultiArray , self.data_received)
+
     def data_received(self, msg):
         self.data = msg.data
+      
+    def get_data(self):
+    return self.data
 
+def animate(i):
+
+    print(str(DATA))
+    plt.clf()
     
-    
+    plt.hist(live_graph.get_data, density=True, bins=30) 
 
 
 if __name__ == '__main__':
     live_graph = LiveGraph()
     r = rospy.Rate(5)
-    fig = plt.gcf()
-    fig.show()
-    fig.canvas.draw()
+    fig = plt.figure()
+    ani = animation.FuncAnimation(fig, animate, interval=1000)
+    plt.show()
+
     while not(rospy.is_shutdown()):
-        print(str(live_graph.data))
-        mu = np.mean(live_graph.data) # CALCULATE MEAN
-        sigma = np.std(live_graph.data) # CALCULATE STD
-
-        plt.hist(live_graph.data, density=True, bins=30)
-
-    
-        plt.xlim([0, 2000])
-        plt.ylim([0, 1])
-        plt.show()
-        fig.canvas.draw()
         r.sleep()
-
-
 
 
 
