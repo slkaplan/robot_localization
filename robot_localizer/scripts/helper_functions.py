@@ -11,6 +11,7 @@ from tf import TransformListener
 from tf import TransformBroadcaster
 
 import math
+import numpy as np
 
 
 class TFHelper(object):

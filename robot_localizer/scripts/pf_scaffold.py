@@ -67,7 +67,7 @@ class ParticleFilter:
             map_frame: the name of the map coordinate frame (should be "map" in most cases)
             odom_frame: the name of the odometry coordinate frame (should be "odom" in most cases)
             scan_topic: the name of the scan topic to listen to (should be "scan" in most cases)
-            n_particles: the number of particles in the filter
+            start_particles: the number of particles which start in the filter
             d_thresh: the amount of linear movement before triggering a filter update
             a_thresh: the amount of angular movement before triggering a filter update
             laser_max_distance: the maximum distance to an obstacle we should use in a likelihood calculation
@@ -92,7 +92,10 @@ class ParticleFilter:
         self.odom_frame = "odom"        # the name of the odometry coordinate frame
         self.scan_topic = "scan"        # the topic where we will get laser scans from 
 
-        self.n_particles = 1000      # the number of particles to use
+        self.start_particles = 100      # the number of particles to use
+        self.end_particles = 10
+        self.resample_count = 0
+        self.middle_step = 4
 
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
         self.a_thresh = math.pi/6       # the amount of angular movement before performing an update
@@ -209,13 +212,18 @@ class ParticleFilter:
         
         p_cloud_length = len(self.particle_cloud)
 
+        n_particles = ParticleFilter.sigmoid_function(self.resample_count,
+            self.start_particles,
+            self.end_particles,
+            self.middle_step,
+            1)
+
+        num_best = int(n_particles * 0.5)
         self.particle_cloud.sort(key=lambda particle: particle.w, reverse=True)
-
-        num_best = int(p_cloud_length*0.5)
         best_particles = self.particle_cloud[0:num_best]
-
         norm_weights= [p.w for p in best_particles]
-        ideal_particles = choice(best_particles, p_cloud_length-len(best_particles), norm_weights)
+
+        ideal_particles = choice(best_particles, n_particles-len(best_particles), norm_weights)
         self.particle_cloud = []
         self.particle_cloud = best_particles
         dist = 0.5 # adding a square meter of noise around each ideal particle
@@ -238,10 +246,8 @@ class ParticleFilter:
         # self.write_to_txt(norm_weights)
         # rospy.sleep(.1)
         self.normalize_particles()
-        norm_weights= [p.w for p in best_particles]
-        float_array = Float64MultiArray()
-        float_array.data = norm_weights
-        self.weight_pub.publish(float_array)
+        self.resample_count += 1
+        
 
         
         
@@ -309,9 +315,9 @@ class ParticleFilter:
             print("Kidnap Problem")
             x_bound, y_bound = self.occupancy_field.get_obstacle_bounding_box()
 
-            x_particle = np.random.uniform(x_bound[0],x_bound[1],size=self.n_particles)
-            y_particle = np.random.uniform(y_bound[0], y_bound[1],size=self.n_particles)
-            theta_particle = np.random.randint(0,360,size=self.n_particles)
+            x_particle = np.random.uniform(x_bound[0],x_bound[1],size=self.start_particles)
+            y_particle = np.random.uniform(y_bound[0], y_bound[1],size=self.start_particles)
+            theta_particle = np.random.randint(0,360,size=self.start_particles)
             
         else:
             print("Starting with Inital Position")
@@ -320,22 +326,27 @@ class ParticleFilter:
                 xy_theta = self.transform_helper.convert_pose_to_xy_and_theta(self.odom_pose.pose)
             x,y,theta = xy_theta    
 
-            x_particle = np.random.normal(x,0.25,size=self.n_particles)
-            y_particle = np.random.normal(y,0.25,size=self.n_particles)
-            theta_particle = np.random.randint(0,360,size=self.n_particles)
+            x_particle = np.random.normal(x,0.25,size=self.start_particles)
+            y_particle = np.random.normal(y,0.25,size=self.start_particles)
+            theta_particle = np.random.randint(0,360,size=self.start_particles)
 
         self.particle_cloud = [Particle(x_particle[i],\
                                         y_particle[i],\
                                         theta_particle[i]) \
-                                for i in range(self.n_particles)]
+                                for i in range(self.start_particles)]
         
         
 
     def normalize_particles(self):
         """ Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
-        raw = [p.w for p in self.particle_cloud]
+        old_weights = [p.w for p in self.particle_cloud]
+        new_weights = []
         for p in self.particle_cloud:
-            p.w = float(p.w)/sum(raw)
+            p.w = float(p.w)/sum(old_weights)
+            new_weights.append(p.w)
+        float_array = Float64MultiArray()
+        float_array.data = new_weights
+        self.weight_pub.publish(float_array)
         
 
 
@@ -451,6 +462,11 @@ class ParticleFilter:
 
                 self.markerArray.markers.append(marker)
 
+    @staticmethod
+    def sigmoid_function(value, max_output, min_output, middle, inc=1):
+        particle_difference = max_output - min_output
+        exponent = inc * (value - (middle/2))
+        return int(particle_difference/(1 + np.exp(exponent)) + min_output)
     
     def write_to_txt(self, prob_dist):
         
