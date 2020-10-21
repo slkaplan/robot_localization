@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 
 import numpy as np
+from numpy.random import choice
+from numpy.random import random_sample
+from copy import deepcopy
 
-num_particles = 2
-angles = np.array([0, 90, 180, 270]) # will be scan indices (0-361)
-distances = np.array([0,1,2,3]) # will be scan values (scan)
-angles_rad = np.deg2rad(angles)
+def draw_random_sample(choices, probabilities, n):
+    """ Return a random sample of n elements from the set choices with the specified probabilities
+        choices: the values to sample from represented as a list
+        probabilities: the probability of selecting each element in choices represented as a list
+        n: the number of samples
+    """
+    values = np.array(range(len(choices)))
+    probs = np.array(probabilities)
+    bins = np.add.accumulate(probs)
+    inds = values[np.digitize(random_sample(n), bins)]
+    samples = []
+    for i in inds:
+        samples.append(deepcopy(choices[int(i)]))
+    return samples
 
-print(angles)
-sin_values = np.sin(angles)
-cos_values = np.cos(angles)
-d_angles = np.multiply(distances, sin_values)
-print(d_angles)
-p = np.full((10,4),d_angles)
-transpose = np.transpose(p)
-print()
-print(p)
-print()
-print(transpose)
+print(draw_random_sample(['a','b','c'],[0.5,0.1],3))
