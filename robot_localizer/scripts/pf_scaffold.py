@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-
+"""
+Title: Robot Localization using a Particle Filter
+Authors: Luke Nonas-Hunter & Sam Kaplan
+Starter Code: Dr. Paul Ruvolo
+"""
 
 import rospy
 
@@ -67,7 +71,9 @@ class ParticleFilter:
             map_frame: the name of the map coordinate frame (should be "map" in most cases)
             odom_frame: the name of the odometry coordinate frame (should be "odom" in most cases)
             scan_topic: the name of the scan topic to listen to (should be "scan" in most cases)
-            start_particles: the number of particles which start in the filter
+            start_particles: the number of particles first initalized
+            end_particles: the number of particles which end in the filter
+            middle_step: the step at which the number of particles has decayed about 50%
             d_thresh: the amount of linear movement before triggering a filter update
             a_thresh: the amount of angular movement before triggering a filter update
             laser_max_distance: the maximum distance to an obstacle we should use in a likelihood calculation
@@ -82,6 +88,9 @@ class ParticleFilter:
             map: the map we will be localizing ourselves in.  The map should be of type nav_msgs/OccupancyGrid
     """
     def __init__(self):
+        """ Define a new particle filter
+
+        """
         print("RUNNING")
         self.initialized = False        # make sure we don't perform updates before everything is setup
         self.kidnap = True
