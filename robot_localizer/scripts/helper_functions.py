@@ -86,9 +86,6 @@ class TFHelper(object):
         else:
             return d2
 
-    def loop_around(self, num):
-        return abs(num % 360) 
-
     def fix_map_to_odom_transform(self, robot_pose, timestamp):
         """ This method constantly updates the offset of the map and
             odometry coordinate systems based on the latest results from

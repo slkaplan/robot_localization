@@ -93,7 +93,7 @@ class ParticleFilter:
         """
         print("RUNNING")
         self.initialized = False        # make sure we don't perform updates before everything is setup
-        self.kidnap = True
+        self.kidnap = False
         rospy.init_node('pf')           # tell roscore that we are creating a new node named "pf"
 
         self.base_frame = "base_link"   # the frame of the robot base
@@ -101,9 +101,9 @@ class ParticleFilter:
         self.odom_frame = "odom"        # the name of the odometry coordinate frame
         self.scan_topic = "scan"        # the topic where we will get laser scans from 
 
-        self.start_particles = 2000      # the number of particles to use
+        self.start_particles = 1000      # the number of particles to use
         self.end_particles = 200
-        self.resample_count = 0
+        self.resample_count = 10
         self.middle_step = 10
 
         self.d_thresh = 0.2             # the amount of linear movement before performing an update
@@ -187,15 +187,15 @@ class ParticleFilter:
             
             direction = math.atan2(delta_y, delta_x)
             theta_1 = self.transform_helper.angle_diff(direction, self.current_odom_xy_theta[2])
-            distance = math.sqrt((delta_x**2) + (delta_y**2))
 
             for p in self.particle_cloud:
+                distance = math.sqrt((delta_x**2) + (delta_y**2)) + np.random.normal(0,0.001)
                 dx = distance * np.cos(p.theta + theta_1)
                 dy = distance * np.sin(p.theta + theta_1)
 
-                p.x += dx + np.random.normal(0,0.001)
-                p.y += dy + np.random.normal(0,0.001)
-                p.theta += delta_theta + np.deg2rad(np.random.normal(0,0.05))
+                p.x += dx
+                p.y += dy 
+                p.theta += delta_theta + np.random.normal(0,0.005)
 
             self.current_odom_xy_theta = new_odom_xy_theta
         else:
@@ -219,8 +219,10 @@ class ParticleFilter:
             self.end_particles,
             self.middle_step,
             1)
+        print("Number of Particles Reassigned: " + str(n_particles))
 
         norm_weights = [p.w for p in self.particle_cloud]
+        # print("Weights: "+ str(norm_weights))
         
         top_percent = 0.20
 
@@ -228,6 +230,7 @@ class ParticleFilter:
         ordered_particles = [self.particle_cloud[index] for index in ordered_indexes]
         best_particles = ordered_particles[int(particle_cloud_length*(1-top_percent)):]
 
+        
         new_particles = ParticleFilter.draw_random_sample(self.particle_cloud, norm_weights, n_particles - int(particle_cloud_length*top_percent))
         dist = 0.001 # adding a square meter of noise around each ideal particle
         self.particle_cloud = []
@@ -236,7 +239,7 @@ class ParticleFilter:
             x_pos, y_pos, angle = p.x, p.y, p.theta
             x_particle = np.random.normal(x_pos,dist)
             y_particle = np.random.normal(y_pos,dist)
-            theta_particle = self.transform_helper.loop_around(np.random.normal(angle,0.05))
+            theta_particle = np.random.normal(angle,0.05)
             self.particle_cloud.append(Particle(x_particle, y_particle, theta_particle))
         self.normalize_particles(self.particle_cloud)
         self.resample_count += 1
@@ -249,29 +252,33 @@ class ParticleFilter:
         scan = msg.ranges
         num_particles = len(self.particle_cloud)
         num_scans = 361
-        step = 1
+        step = 2
 
         angles = np.arange(num_scans) # will be scan indices (0-361)
         distances = np.array(scan) # will be scan values (scan)
         angles_rad = np.deg2rad(angles)
 
-        sin_values = np.sin(angles_rad)
-        cos_values = np.cos(angles_rad)
-        d_angles_sin = np.multiply(distances, sin_values)
-        d_angles_cos = np.multiply(distances, cos_values)
-
-        d_angles_sin = d_angles_sin[0:361:step]
-        d_angles_cos = d_angles_cos[0:361:step]
-
+        
         for p in self.particle_cloud:
+
+            sin_values = np.sin(angles_rad + p.theta)
+            cos_values = np.cos(angles_rad + p.theta)
+            d_angles_sin = np.multiply(distances, sin_values)
+            d_angles_cos = np.multiply(distances, cos_values)
+
+            d_angles_sin = d_angles_sin[0:361:step]
+            d_angles_cos = d_angles_cos[0:361:step]
+
             total_beam_x = np.add(p.x, d_angles_cos)
             total_beam_y = np.add(p.y, d_angles_sin)
 
             particle_distances = self.occupancy_field.get_closest_obstacle_distance(total_beam_x, total_beam_y)
+           
             cleaned_particle_distances = [2*np.exp(-(dist**2)) for dist in particle_distances if(math.isnan(dist)!= True)]
             
             p_d_cubed = np.power(cleaned_particle_distances,3)
             p.w = np.sum(p_d_cubed)
+
         self.normalize_particles(self.particle_cloud)
 
 
@@ -330,13 +337,14 @@ class ParticleFilter:
 
             x_particle = np.random.normal(x,0.25,size=self.start_particles)
             y_particle = np.random.normal(y,0.25,size=self.start_particles)
-            theta_particle = np.deg2rad(np.random.randint(0,360,size=self.start_particles))
+            theta_particle = np.random.normal(theta,0.001,size=self.start_particles)
 
         self.particle_cloud = [Particle(x_particle[i],\
                                         y_particle[i],\
                                         theta_particle[i]) \
                                 for i in range(self.start_particles)]
         
+
         
 
     def normalize_particles(self, particle_list):
@@ -385,7 +393,7 @@ class ParticleFilter:
         # wait a little while to see if the transform becomes available.  This fixes a race
         # condition where the scan would arrive a little bit before the odom to base_link transform
         # was updated.
-        self.tf_listener.waitForTransform(self.base_frame, msg.header.frame_id, msg.header.stamp, rospy.Duration(0.5))
+        # self.tf_listener.waitForTransform(self.base_frame, msg.header.frame_id, msg.header.stamp, rospy.Duration(0.5))
         if not(self.tf_listener.canTransform(self.base_frame, msg.header.frame_id, msg.header.stamp)):
             # need to know how to transform the laser to the base frame
             # this will be given by either Gazebo or neato_node
@@ -471,15 +479,7 @@ class ParticleFilter:
         exponent = inc * (value - (middle/2))
         return int(particle_difference/(1 + np.exp(exponent)) + min_output)
     
-    def write_to_txt(self, prob_dist):
-        
-        file_object = open(r"resample_prob.txt","r+")
-        file_object.truncate(0)
-        for i in range(len(prob_dist)):
-            file_object.write(str(prob_dist[i])+"\n")
 
-        
-        file_object.close() 
 
 
 if __name__ == '__main__':
